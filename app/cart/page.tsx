@@ -1,131 +1,235 @@
 "use client";
 
-import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import Container from "@/components/Container";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { useCart } from "@/store/cart";
+import { useAuth } from "@/store/auth";
+import { useEffect } from "react";
 
 export default function CartPage() {
-  // Mock cart data (later replace with Zustand / DB data)
-  const [cart, setCart] = useState([
-    {
-      id: "1",
-      name: "Black T-Shirt",
-      price: 25,
-      quantity: 1,
-      image: "/images/tshirt.jpg",
-    },
-    {
-      id: "2",
-      name: "Sneakers",
-      price: 70,
-      quantity: 2,
-      image: "/images/sneakers.jpg",
-    },
-  ]);
+  const {
+    items,
+    loading,
+    error,
+    fetchCart,
+    addItem,
+    removeItem: removeCartItem,
+  } = useCart();
+  const { user } = useAuth();
 
-  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  useEffect(() => {
+    fetchCart();
+  }, [fetchCart, user]);
 
-  const updateQuantity = (id: string, qty: number) => {
-    setCart((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, quantity: Math.max(1, qty) } : item
-      )
-    );
+  const getDisplayProduct = (item: (typeof items)[number]) => {
+    const rawProduct =
+      item.product && typeof item.product === "object" ? item.product : {};
+    const fallbackProduct =
+      (item as any)?.productId && typeof (item as any)?.productId === "object"
+        ? ((item as any).productId as Record<string, unknown>)
+        : {};
+    const product = { ...fallbackProduct, ...rawProduct } as Record<
+      string,
+      unknown
+    >;
+
+    const title =
+      typeof product.title === "string"
+        ? product.title
+        : typeof product.name === "string"
+          ? product.name
+          : typeof product.productName === "string"
+            ? product.productName
+            : `Item ${item.productId}`;
+
+    const price =
+      typeof product.price === "number"
+        ? product.price
+        : typeof product.price === "string"
+          ? Number(product.price)
+          : 0;
+
+    const image =
+      Array.isArray(product.images) && product.images[0]
+        ? String(product.images[0])
+        : typeof (product as any).image === "string"
+          ? (product as any).image
+          : typeof (product as any).thumbnail === "string"
+            ? (product as any).thumbnail
+            : "/images/hero.jpg";
+
+    return { title, price, image };
   };
 
-  const removeItem = (id: string) => {
-    setCart((prev) => prev.filter((item) => item.id !== id));
+  const total = items.reduce((sum, item) => {
+    const { price } = getDisplayProduct(item);
+    return sum + price * (item.qty || 0);
+  }, 0);
+
+  const updateQuantity = async (id: string, qty: number) => {
+    try {
+      await addItem(id, Math.max(1, qty));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const removeItem = async (id: string) => {
+    try {
+      await removeCartItem(id);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   return (
-    <main className="max-w-6xl mx-auto px-6 py-12">
-      <h1 className="text-3xl font-bold mb-8">Your Cart</h1>
+    <main className="bg-gradient-to-b from-gray-50 via-white to-gray-50">
+      <Container className="py-12">
+        <h1 className="text-3xl font-bold text-gray-900">Your cart</h1>
+        <p className="mt-2 text-sm text-gray-600">
+          Adjust quantities, review totals, and move to checkout when ready.
+        </p>
 
-      {cart.length === 0 ? (
-        <div className="text-center text-gray-600">
-          <p>Your cart is empty.</p>
-          <Link
-            href="/products"
-            className="mt-4 inline-block bg-black text-white px-6 py-3 rounded-md"
-          >
-            Shop Now
-          </Link>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-          {/* Cart Items */}
-          <div className="md:col-span-2 space-y-6">
-            {cart.map((item) => (
-              <div
-                key={item.id}
-                className="flex gap-4 items-center border-b pb-5"
-              >
-                <Image
-                  src={item.image}
-                  alt={item.name}
-                  width={100}
-                  height={100}
-                  className="rounded-md object-cover"
-                />
+        {error && (
+          <Card className="mt-6 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </Card>
+        )}
 
-                <div className="flex-1">
-                  <h2 className="text-xl font-semibold">{item.name}</h2>
-                  <p className="text-gray-500">${item.price}</p>
+        {!user ? (
+          <Card className="mt-8 text-center text-gray-700">
+            <div className="space-y-4 py-10">
+              <p className="text-lg font-semibold">
+                Sign in to view your cart
+              </p>
+              <p className="text-sm text-gray-500">
+                Your saved items will appear once you log in.
+              </p>
+              <Link href="/login">
+                <Button size="lg">Login</Button>
+              </Link>
+            </div>
+          </Card>
+        ) : loading ? (
+          <Card className="mt-8 text-center text-gray-700">
+            <div className="space-y-4 py-10">
+              <p className="text-lg font-semibold">Loading your cart…</p>
+              <p className="text-sm text-gray-500">
+                Fetching the latest items.
+              </p>
+            </div>
+          </Card>
+        ) : items.length === 0 ? (
+          <Card className="mt-8 text-center text-gray-700">
+            <div className="space-y-4 py-10">
+              <p className="text-lg font-semibold">Your cart is empty</p>
+              <p className="text-sm text-gray-500">
+                Add a few favorites and they will show up here.
+              </p>
+              <Link href="/products">
+                <Button size="lg">Shop products</Button>
+              </Link>
+            </div>
+          </Card>
+        ) : (
+          <div className="mt-10 grid grid-cols-1 gap-8 md:grid-cols-[2fr,1fr]">
+            <Card className="space-y-6">
+              {items.map((item) => {
+                const display = getDisplayProduct(item);
+                return (
+                  <div
+                    key={item.productId}
+                    className="flex flex-col gap-4 border-b border-gray-100 pb-5 last:border-none last:pb-0 sm:flex-row sm:items-center"
+                  >
+                    <div className="relative h-28 w-28 overflow-hidden rounded-2xl bg-gray-50">
+                      <Image
+                        src={display.image}
+                        alt={display.title}
+                        fill
+                        sizes="150px"
+                        className="object-cover"
+                      />
+                    </div>
 
-                  <div className="flex items-center gap-3 mt-3">
-                    <button
-                      onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                      className="px-3 py-1 border rounded"
-                    >
-                      -
-                    </button>
+                    <div className="flex flex-1 flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h2 className="text-lg font-semibold text-gray-900">
+                            {display.title}
+                          </h2>
+                          <p className="text-sm text-gray-500">
+                            ${display.price.toFixed(2)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => removeItem(item.productId)}
+                          className="text-sm font-semibold text-gray-500 underline underline-offset-4"
+                        >
+                          Remove
+                        </button>
+                      </div>
 
-                    <span className="px-3">{item.quantity}</span>
-
-                    <button
-                      onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                      className="px-3 py-1 border rounded"
-                    >
-                      +
-                    </button>
-
-                    <button
-                      onClick={() => removeItem(item.id)}
-                      className="ml-4 text-red-600 hover:underline"
-                    >
-                      Remove
-                    </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() =>
+                            updateQuantity(item.productId, (item.qty || 1) - 1)
+                          }
+                          className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-lg font-semibold"
+                        >
+                          -
+                        </button>
+                        <span className="w-10 text-center font-semibold">
+                          {item.qty || 1}
+                        </span>
+                        <button
+                          onClick={() =>
+                            updateQuantity(item.productId, (item.qty || 1) + 1)
+                          }
+                          className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-lg font-semibold"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                );
+              })}
+            </Card>
+
+            <Card className="h-fit space-y-4 bg-gray-50">
+              <h2 className="text-xl font-bold text-gray-900">Order summary</h2>
+
+              <div className="space-y-2 text-sm text-gray-700">
+                <Row label="Subtotal" value={`$${total.toFixed(2)}`} />
+                <Row label="Shipping" value="$5.00" />
               </div>
-            ))}
+
+              <div className="border-t border-gray-200 pt-3 text-lg font-semibold text-gray-900">
+                <Row label="Total" value={`$${(total + 5).toFixed(2)}`} />
+              </div>
+
+              <Button fullWidth size="lg">
+                Proceed to checkout
+              </Button>
+              <p className="text-xs text-gray-500">
+                You can review delivery options on the next step.
+              </p>
+            </Card>
           </div>
-
-          {/* Summary */}
-          <div className="border rounded-xl p-6 h-fit bg-gray-50">
-            <h2 className="text-xl font-bold mb-4">Order Summary</h2>
-
-            <div className="flex justify-between mb-2">
-              <span>Subtotal:</span>
-              <span>${total.toFixed(2)}</span>
-            </div>
-
-            <div className="flex justify-between mb-2">
-              <span>Shipping:</span>
-              <span>$5.00</span>
-            </div>
-
-            <div className="flex justify-between font-semibold text-lg mt-4">
-              <span>Total:</span>
-              <span>${(total + 5).toFixed(2)}</span>
-            </div>
-
-            <button className="mt-6 w-full bg-black text-white py-3 rounded-lg hover:bg-gray-800 transition">
-              Proceed to Checkout
-            </button>
-          </div>
-        </div>
-      )}
+        )}
+      </Container>
     </main>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span>{label}</span>
+      <span>{value}</span>
+    </div>
   );
 }
